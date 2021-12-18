@@ -14,8 +14,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs);
 void serve_static(int fd, char *filename, int filesize);
 void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs);
-void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
-                 char *longmsg);
+void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 
 int main(int argc, char **argv) {
   int listenfd, connfd;
@@ -30,12 +29,11 @@ int main(int argc, char **argv) {
   }
 
   listenfd = Open_listenfd(argv[1]);
+
   while (1) {
     clientlen = sizeof(clientaddr);
-    connfd = Accept(listenfd, (SA *)&clientaddr,
-                    &clientlen);  // line:netp:tiny:accept
-    Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE,
-                0);
+    connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);  // line:netp:tiny:accept
+    Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE,0);
     //getnameinfo:converts socket address structure to host and service name string
     printf("Accepted connection from (%s, %s)\n", hostname, port);
     doit(connfd);   // line:netp:tiny:doit
@@ -56,7 +54,7 @@ void doit(int fd){
   printf("Request headers:\n");
   printf("%s", buf);
   sscanf(buf, "%s %s %s", method, uri, version);
-  if(strcasecmp(method, "GET")){ //strcasecmp는 대소문자 구분없이 비교
+  if(strcasecmp(method, "GET")) { //strcasecmp는 대소문자 구분없이 비교
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
     return;
   }
@@ -64,13 +62,13 @@ void doit(int fd){
   /* Parse URI from GET request  */
   
   is_static = parse_uri(uri, filename, cgiargs);
-  if(stat(filename, &sbuf) < 0){
+  if(stat(filename, &sbuf) < 0) {
     clienterror(fd, filename, "404", "Not found", "Tiny couldn't find this file");
     return;
   }
 
-  if (is_static){ /*Serve static content*/
-    if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)){
+  if (is_static) { /*Serve static content*/
+    if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
       //S_ISREG: 정규 파일인지 판별
       //S_IRURT: 사용자 파일을 읽을 수 있음
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the file");
@@ -78,8 +76,8 @@ void doit(int fd){
     }
     serve_static(fd, filename, sbuf.st_size);
   }
-  else{/*Serve dynamic content*/
-    if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)){
+  else {/*Serve dynamic content*/
+    if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
       //S_ISREG: 정규 파일인지 판별
       //S_IXURT: 사용자가 파일을 실행할 수 있음
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the file");
@@ -89,7 +87,7 @@ void doit(int fd){
   }
 }
 
-void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg){
+void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg) {
   char buf[MAXLINE], body[MAXBUF];
   /* Build the HTTP response body */
   sprintf(body, "<html><title>Tiny Error</title>");
@@ -117,7 +115,7 @@ void read_requesthdrs(rio_t *rp){
   }
   return;
 }
-int parse_uri(char *uri, char *filename, char *cgiargs){
+int parse_uri(char *uri, char *filename, char *cgiargs) {
   char *ptr;
   if(!strstr(uri, "cgi-bin")){/*static content*/
     //strstr(str1, str2): str1에서 str2가 시작하는 시점을 찾는다, 이때 string2가 없는 경우 NULL return
@@ -176,7 +174,7 @@ void serve_static(int fd, char *filename, int filesize){
 /*
  * get_filetype - Derive file type from filename
  */
-void get_filetype(char *filename, char *filetype){
+void get_filetype(char *filename, char *filetype) {
   if(strstr(filename, ".html")){
     strcpy(filetype, "text/html");
   }else if(strstr(filename, ".gif")){
