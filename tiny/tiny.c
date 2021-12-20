@@ -42,8 +42,7 @@ int main(int argc, char **argv) {
 
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA *) &clientaddr, &clientlen); // 반복적으로 연결 요청을 접수
-        Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE,
-                    port, MAXLINE, 0);
+        Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
         printf("Accepted connection from (%s, %s)\n", hostname, port);
         doit(connfd); // 트랜잭션 수행   kjkjlkjsdasd
         Close(connfd); // 자신 쪽의 연결 끝을 닫는다.
@@ -80,16 +79,15 @@ void doit(int fd) {
   sscanf(buf, "%s %s %s", method, uri, version); // 버퍼에서 자료형을 읽는다, 분석한다.
 
   //메소드가 get이 아니면 에러를 뱉고 종료한다
-
   if (strcasecmp(method, "POST") == 0) {
     printf("POSTPOSTPOSTPOST\n");
   } else if (strcasecmp(method, "GET") == 0) {
     // get인경우
     read_requesthdrs(&rio);
     /* Parse URI from GET request */
-    //uri를 분석한다.
+    // uri를 분석한다.
     // 파일이 없는 경우 에러를 띄운다/
-    //parse_uri를 들어가기 전에 filename과 cgiargs는 없다.
+    // parse_uri를 들어가기 전에 filename과 cgiargs는 없다.
     is_static = parse_uri(uri, filename, cgiargs);
     printf("uri : %s, filename : %s, cgiargs : %s \n", uri, filename, cgiargs);
 
@@ -99,24 +97,24 @@ void doit(int fd) {
     }
     // 정적 콘텐츠일경우
     if (is_static) { /* Serve static content */
-      //파일 읽기 권한이 있는지 확인하기
-      //S_ISREG : 일반 파일인가? , S_IRUSR: 읽기 권한이 있는지? S_IXUSR 실행권한이 있는가?
+      // 파일 읽기 권한이 있는지 확인하기
+      // S_ISREG : 일반 파일인가? , S_IRUSR: 읽기 권한이 있는지? S_IXUSR 실행권한이 있는가?
       if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
-          //권한이 없다면 클라이언트에게 에러를 전달
+          // 권한이 없다면 클라이언트에게 에러를 전달
           clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the file");
           return;
       }
-      //그렇다면 클라이언트에게 파일 제공
+      // 그렇다면 클라이언트에게 파일 제공
       serve_static(fd, filename, sbuf.st_size);
-    }//정적 컨텐츠가 아닐경우
+    }// 정적 컨텐츠가 아닐경우
     else { /* Serve dynamic content */
       // 파일이 실행가능한 것인지
       if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
-          //실행이 불가능하다면 에러를 전
+          // 실행이 불가능하다면 에러를 전
           clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't run the CGI program");
           return;
       }
-      //그렇다면 클라이언트에게 파일 제공.
+      // 그렇다면 클라이언트에게 파일 제공.
       serve_dynamic(fd, filename, cgiargs);
     }
   } else {
@@ -143,18 +141,18 @@ int parse_uri(char *uri, char *filename, char *cgiargs) {
     if (ptr) {
       // 물음표 뒤에 있는 인자 다 갖다 붙인다.
       strcpy(cgiargs, ptr + 1);
-      //포인터는 문자열 마지막으로 바꾼다.
+      // 포인터는 문자열 마지막으로 바꾼다.
       *ptr = '\0'; // uri물음표 뒤 다 없애기
     } else {
       strcpy(cgiargs, ""); // 물음표 뒤 인자들 전부 넣기
     }
-    strcpy(filename, "."); //나머지 부분 상대  uri로 바꿈,
+    strcpy(filename, "."); // 나머지 부분 상대  uri로 바꿈,
     strcat(filename, uri); // ./uri 가 된다.
     return 0;
   }
 }
 
-//클라이언트에게 오류 보고 한다
+// 클라이언트에게 오류 보고 한다.
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg) {
   char buf[MAXLINE], body[MAXBUF];
   /* Build the HTTP response body */
