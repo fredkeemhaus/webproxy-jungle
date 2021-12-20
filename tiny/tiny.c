@@ -7,9 +7,11 @@
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 int parse_uri(char *uri, char *filename, char *cgiargs);
-void serve_static(int fd, char *filename, int filesize);
+// void serve_static(int fd, char *filename, int filesize);
+void serve_static(int fd, char *filename, int filesize, char *method);
 void get_filetype(char *filename, char *filetype);
-void serve_dynamic(int fd, char *filenmae, char *cgiargs);
+// void serve_dynamic(int fd, char *filenmae, char *cgiargs);
+void serve_dynamic(int fd, char *filename, char *cgiargs, char *method);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 /**
  *	@fn		main
@@ -105,7 +107,7 @@ void doit(int fd) {
           return;
       }
       // 그렇다면 클라이언트에게 파일 제공
-      serve_static(fd, filename, sbuf.st_size);
+      serve_static(fd, filename, sbuf.st_size, method);
     }// 정적 컨텐츠가 아닐경우
     else { /* Serve dynamic content */
       // 파일이 실행가능한 것인지
@@ -115,7 +117,7 @@ void doit(int fd) {
           return;
       }
       // 그렇다면 클라이언트에게 파일 제공.
-      serve_dynamic(fd, filename, cgiargs);
+      serve_dynamic(fd, filename, cgiargs, method);
     }
   } else {
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
@@ -181,7 +183,7 @@ void read_requesthdrs(rio_t *rp) {
   return;
 }
 
-void serve_dynamic(int fd, char *filename, char *cgiargs) {
+void serve_dynamic(int fd, char *filename, char *cgiargs, char *method) {
   char buf[MAXLINE], *emptylist[] = {NULL};
   /* Return first part of HTTP response*/
   sprintf(buf, "HTTP/1.0 200 OK\r\n");
@@ -192,6 +194,8 @@ void serve_dynamic(int fd, char *filename, char *cgiargs) {
   //클라이언트는 성공을 알려주는 응답라인을 보내는 것으로 시작한다.
   if (Fork() == 0) { //타이니는 자식프로세스를 포크하고 동적 컨텐츠를 제공한다.
     setenv("QUERY_STRING", cgiargs, 1);
+    setenv("REQUEST_METHOD", method, 1);    // REQUEST_METHOD: GET or POST
+
     //자식은 QUERY_STRING 환경변수를 요청 uri의 cgi인자로 초기화 한다.  (15000 & 213)
     Dup2(fd, STDOUT_FILENO); //자식은 자식의 표준 출력을 연결 파일 식별자로 재지정하고,
 
@@ -204,7 +208,7 @@ void serve_dynamic(int fd, char *filename, char *cgiargs) {
 }
 
 // fd 응답받는 소켓(연결식별자), 파일 이름, 파일 사이즈
-void serve_static(int fd, char *filename, int filesize) {
+void serve_static(int fd, char *filename, int filesize, char *method) {
   int srcfd;
   char *srcp, filetype[MAXLINE], buf[MAXBUF];
   /* send response headers to client*/
@@ -225,6 +229,9 @@ void serve_static(int fd, char *filename, int filesize) {
   printf("Response headers : \n");
   printf("%s", buf);
 
+  if (strcasecmp(method, "HEAD") == 0) {
+    return; 
+  }
   //읽을 수 있는 파일로 열기
   srcfd = Open(filename, O_RDONLY, 0); //open read only 읽고
   //PROT_READ -> 페이지는 읽을 수만 있다.
