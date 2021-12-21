@@ -29,28 +29,44 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
  */
 // fd : 파일 또는 소켓을 지칭하기 위해 부여한 숫자
 // socket
+
+// 입력 ./tiny 8000 / argc = 2, argv[0] = tiny, argv[1] = 8000
 int main(int argc, char **argv) {
-    int listenfd, connfd;
-    char hostname[MAXLINE], port[MAXLINE];
-    socklen_t clientlen;
-    struct sockaddr_storage clientaddr;
-    /* Check command-line args */
-    if (argc != 2) {
-        fprintf(stderr, "usage: %s <port>\n", argv[0]);
-        exit(1);
-    }
-    listenfd = Open_listenfd(argv[1]);
-    while (1) { // 무한 서버 루프
+  int listenfd, connfd;
+  char hostname[MAXLINE], port[MAXLINE];
+  socklen_t clientlen;
+  struct sockaddr_storage clientaddr;
+  /* Check command-line args */
+  if (argc != 2) {
+      fprintf(stderr, "usage: %s <port>\n", argv[0]);
+      exit(1);
+  }
 
-        clientlen = sizeof(clientaddr);
-        connfd = Accept(listenfd, (SA *) &clientaddr, &clientlen); // 반복적으로 연결 요청을 접수
-        Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
-        printf("Accepted connection from (%s, %s)\n", hostname, port);
-        doit(connfd); // 트랜잭션 수행   kjkjlkjsdasd
-        Close(connfd); // 자신 쪽의 연결 끝을 닫는다.
-        printf("===============================================\n\n");
+  /* Open_listenfd 함수를 호출해서 듣기 소켓을 오픈한다. 인자로 포트번호를 넘겨준다. */
+  // Open_listenfd는 요청받을 준비가된 듣기 식별자를 리턴한다 = listenfd
+  listenfd = Open_listenfd(argv[1]);
 
-    }
+  /* 전형적인 무한 서버 루프를 실행*/
+  while (1) {
+
+    // accept 함수 인자에 넣기 위한 주소 길이를 계산
+    clientlen = sizeof(clientaddr);
+
+    /* 반복적으로 연결 요청을 접수 */
+    // accept 함수는 1. 듣기 식별자, 2. 소켓주소구조체의 주소, 3. 주소(소켓구조체)의 길이를 인자로 받는다.
+    connfd = Accept(listenfd, (SA *) &clientaddr, &clientlen);
+
+    // Getaddrinfo는 호스트 이름: 호스트 주소, 서비스 이름: 포트 번호의 스트링 표시를 소켓 주소 구조체로 변환
+    // Getnameinfo는 위를 반대로 소켓 주소 구조체에서 스트링 표시로 변환.
+    Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
+    printf("Accepted connection from (%s, %s)\n", hostname, port);
+
+    /* 트랜젝션을 수행 */
+    doit(connfd);
+
+    /* 트랜잭션이 수행된 후 자신 쪽의 연결 끝 (소켓) 을 닫는다. */
+    Close(connfd); // 자신 쪽의 연결 끝을 닫는다.
+  }
 }
 
 /**
@@ -72,92 +88,111 @@ void doit(int fd) {
   struct stat sbuf;
   char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
   char filename[MAXLINE], cgiargs[MAXLINE];
+
+  // rio_readlineb를 위해 rio_t 타입(구조체)의 읽기 버퍼를 선언
   rio_t rio;
+
   /* Read request line and headers */
-  Rio_readinitb(&rio, fd); // &rio 주소를 가지는 버퍼를 만든다.
+  /* Rio = Robust I/O */
+  // rio_t 구조체를 초기화 해준다.
+  Rio_readinitb(&rio, fd); // &rio 주소를 가지는 읽기 버퍼와 식별자 connfd를 연결한다.
   Rio_readlineb(&rio, buf, MAXLINE); // 버퍼에서 읽은 것이 담겨있다.
   printf("Request headers:\n");
   printf("%s", buf); // "GET / HTTP/1.1"
   sscanf(buf, "%s %s %s", method, uri, version); // 버퍼에서 자료형을 읽는다, 분석한다.
 
-  //메소드가 get이 아니면 에러를 뱉고 종료한다
-  if (strcasecmp(method, "POST") == 0) {
-    printf("POSTPOSTPOSTPOST\n");
-  } else if (strcasecmp(method, "GET") == 0) {
-    // get인경우
-    read_requesthdrs(&rio);
-    /* Parse URI from GET request */
-    // uri를 분석한다.
-    // 파일이 없는 경우 에러를 띄운다/
-    // parse_uri를 들어가기 전에 filename과 cgiargs는 없다.
-    is_static = parse_uri(uri, filename, cgiargs);
-    printf("uri : %s, filename : %s, cgiargs : %s \n", uri, filename, cgiargs);
-
-    if (stat(filename, &sbuf) < 0) { //stat는 파일 정보를 불러오고 sbuf에 내용을 적어준다. ok 0, errer -1
-      clienterror(fd, filename, "404", "Not found", "Tiny couldn't find this file");
-      return;
-    }
-    // 정적 콘텐츠일경우
-    if (is_static) { /* Serve static content */
-      // 파일 읽기 권한이 있는지 확인하기
-      // S_ISREG : 일반 파일인가? , S_IRUSR: 읽기 권한이 있는지? S_IXUSR 실행권한이 있는가?
-      if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
-          // 권한이 없다면 클라이언트에게 에러를 전달
-          clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the file");
-          return;
-      }
-      // 그렇다면 클라이언트에게 파일 제공
-      serve_static(fd, filename, sbuf.st_size, method);
-    }// 정적 컨텐츠가 아닐경우
-    else { /* Serve dynamic content */
-      // 파일이 실행가능한 것인지
-      if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
-          // 실행이 불가능하다면 에러를 전
-          clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't run the CGI program");
-          return;
-      }
-      // 그렇다면 클라이언트에게 파일 제공.
-      serve_dynamic(fd, filename, cgiargs, method);
-    }
-  } else {
+ if (strcasecmp(method, "GET") && strcasecmp(method, "HEAD")) {
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
     return;
   }
+  
+  /* GET method라면 읽어들이고, 다른 요청 헤더들을 무시한다. */
+  read_requesthdrs(&rio);
+  
+  /* Parse URI form GET request */
+  /* URI 를 파일 이름과 비어 있을 수도 있는 CGI 인자 스트링으로 분석하고, 요청이 정적 또는 동적 컨텐츠를 위한 것인지 나타내는 플래그를 설정한다.  */
+  is_static = parse_uri(uri, filename, cgiargs);
+  printf("uri : %s, filename : %s, cgiargs : %s \n", uri, filename, cgiargs);
+
+  /* 만일 파일이 디스크상에 있지 않으면, 에러메세지를 즉시 클라아언트에게 보내고 메인 루틴으로 리턴 */
+  if (stat(filename, &sbuf) < 0) { //stat는 파일 정보를 불러오고 sbuf에 내용을 적어준다. ok 0, errer -1
+    clienterror(fd, filename, "404", "Not found", "Tiny couldn't find this file");
+    return;
+  }
+
+    /* Serve static content */
+  if (is_static) {
+    // 파일 읽기 권한이 있는지 확인하기
+    // S_ISREG : 일반 파일인가? , S_IRUSR: 읽기 권한이 있는지? S_IXUSR 실행권한이 있는가?
+    if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
+        // 권한이 없다면 클라이언트에게 에러를 전달
+        clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the file");
+        return;
+    }
+    // 그렇다면 클라이언트에게 파일 제공
+    serve_static(fd, filename, sbuf.st_size, method);
+  } else { /* Serve dynamic content */
+    /* 실행 가능한 파일인지 검증 */
+    if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
+        // 실행이 불가능하다면 에러를 전달
+        clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't run the CGI program");
+        return;
+    }
+    // 그렇다면 클라이언트에게 파일 제공.
+    serve_dynamic(fd, filename, cgiargs, method);
+  }
 }
 
+/* Parse URI form GET request */
+/* URI 를 파일 이름과 비어 있을 수도 있는 CGI 인자 스트링으로 분석하고, 요청이 정적 또는 동적 컨텐츠를 위한 것인지 나타내는 플래그를 설정한다. */
+// URI 예시 static: /mp4sample.mp4 , / , /home.html
+// dynamic: /cgi-bin/adder?first=1213&second=1232
 int parse_uri(char *uri, char *filename, char *cgiargs) {
   char *ptr;
-  //cgi-bin이 없다면
+  
+  /* strstr 으로 cgi-bin이 들어있는지 확인하고 양수값을 리턴하면 dynamic content를 요구하는 것이기에 조건문을 탈출 */
   if (!strstr(uri, "cgi-bin")) { /* Static content*/
     strcpy(cgiargs, "");
     strcpy(filename, ".");
-    strcat(filename, uri); // ./uri/home.html 이 된다
+    strcat(filename, uri);
+
+    //결과 cgiargs = "" 공백 문자열, filename = "./~~ or ./home.html
+	  // uri 문자열 끝이 / 일 경우 home.html을 filename에 붙혀준다.
     if (uri[strlen(uri) - 1] == '/') {
       strcat(filename, "home.html");
     }
     return 1;
+
   } else { /* Dynamic content*/
-    //http://52.79.55.247:1024/cgi-bin/adder?123&456
+    // uri 예시: dynamic: /cgi-bin/adder?first=1213&second
     ptr = index(uri, '?');
-    //CGI인자 추출
+    // index 함수는 문자열에서 특정 문자의 위치를 반환한다
+    // CGI인자 추출
     if (ptr) {
       // 물음표 뒤에 있는 인자 다 갖다 붙인다.
+      // 인자로 주어진 값들을 cgiargs 변수에 넣는다.
       strcpy(cgiargs, ptr + 1);
       // 포인터는 문자열 마지막으로 바꾼다.
       *ptr = '\0'; // uri물음표 뒤 다 없애기
     } else {
       strcpy(cgiargs, ""); // 물음표 뒤 인자들 전부 넣기
     }
-    strcpy(filename, "."); // 나머지 부분 상대  uri로 바꿈,
+    strcpy(filename, "."); // 나머지 부분 상대 uri로 바꿈,
     strcat(filename, uri); // ./uri 가 된다.
     return 0;
   }
 }
 
-// 클라이언트에게 오류 보고 한다.
+/* 명백한 오류에 대해서 클라이언트에게 보고하는 함수. 
+ * HTTP응답을 응답 라인에 적절한 상태 코드와 상태 메시지와 함께 클라이언트에게 보낸다.
+ * 
+ */
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg) {
   char buf[MAXLINE], body[MAXBUF];
   /* Build the HTTP response body */
+  /* 브라우저 사용자에게 에러를 설명하는 응답 본체에 HTML도 함께 보낸다 */
+  /* HTML 응답은 본체에서 컨텐츠의 크기와 타입을 나타내야하기에, HTMl 컨텐츠를 한 개의 스트링으로 만든다. */
+  /* 이는 sprintf를 통해 body는 인자에 스택되어 하나의 긴 스트리잉 저장된다. */
   sprintf(body, "<html><title>Tiny Error</title>");
   sprintf(body, "%s<body bgcolor=""ffffff"">\r\n", body);
   sprintf(body, "%s%s: %s\r\n", body, errnum, shortmsg);
@@ -173,12 +208,20 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
   Rio_writen(fd, body, strlen(body));
 }
 
-//요청 헤더 읽기
+/* Tiny는 요청 헤더 내의 어떤 정보도 사용하지 않는다
+ * 단순히 이들을 읽고 무시한다. 
+ */
 void read_requesthdrs(rio_t *rp) {
   char buf[MAXLINE];
-  Rio_readlineb(rp, buf, MAXLINE); // 버터에서 MAXLINE 까지 읽기
-  while (strcmp(buf, "\r\n")) {  //끝줄 나올 때 까지 읽는다
+  Rio_readlineb(rp, buf, MAXLINE); // 버퍼에서 MAXLINE 까지 읽기
+
+  /* strcmp 두 문자열을 비교하는 함수 */
+  /* 헤더의 마지막 줄은 비어있기에 \r\n 만 buf에 담겨있다면 while문을 탈출한다.  */
+  while (strcmp(buf, "\r\n")) {
+    	//rio 설명에 나와있는 것처럼 rio_readlineb는 \n를 만날때 멈춘다.
       Rio_readlineb(rp, buf, MAXLINE);
+      // 멈춘 지점 까지 출력하고 다시 while
+      printf("%s", buf);
   }
   return;
 }
@@ -229,19 +272,19 @@ void serve_static(int fd, char *filename, int filesize, char *method) {
   printf("Response headers : \n");
   printf("%s", buf);
 
-  if (strcasecmp(method, "HEAD") == 0) {
+  if (!strcasecmp(method, "HEAD")) {
     return; 
   }
   //읽을 수 있는 파일로 열기
   srcfd = Open(filename, O_RDONLY, 0); //open read only 읽고
-  //PROT_READ -> 페이지는 읽을 수만 있다.
+  // PROT_READ -> 페이지는 읽을 수만 있다.
   // 파일을 어떤 메모리 공간에 대응시키고 첫주소를 리턴
-//    srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); //메모리로 넘기고
+  // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); //메모리로 넘기고
   srcp = (char *) Malloc(filesize);
   Rio_readn(srcfd, srcp, filesize);
-  //매핑위치, 매핑시킬 파일의 길이, 메모리 보호정책, 파일공유정책,srcfd ,매핑할때 메모리 오프셋
+  // 매핑위치, 매핑시킬 파일의 길이, 메모리 보호정책, 파일공유정책,srcfd ,매핑할때 메모리 오프셋
 
-  Close(srcfd);//닫기
+  Close(srcfd); // 닫기
 
 
   Rio_writen(fd, srcp, filesize);
@@ -253,6 +296,10 @@ void serve_static(int fd, char *filename, int filesize, char *method) {
 //    Munmap(srcp, filesize); //메모리 해제
 }
 
+/*
+ * get_filetype - Derive file type from filename
+ * strstr 두번쨰 인자가 첫번째 인자에 들어있는지 확인
+ */
 void get_filetype(char *filename, char *filetype) {
   if (strstr(filename, ".html")) {
     strcpy(filetype, "text/html");
@@ -262,6 +309,7 @@ void get_filetype(char *filename, char *filetype) {
     strcpy(filename, "image/.png");
   } else if (strstr(filename, ".jpg")) {
     strcpy(filetype, "image/jpeg");
+  /* 11.7 숙제 문제 - Tiny 가 MPG  비디오 파일을 처리하도록 하기.  */
   } else if (strstr(filename, ".mp4")) {
     strcpy(filetype, "video/mp4");
   } else {
