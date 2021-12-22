@@ -13,22 +13,6 @@ void get_filetype(char *filename, char *filetype);
 // void serve_dynamic(int fd, char *filenmae, char *cgiargs);
 void serve_dynamic(int fd, char *filename, char *cgiargs, char *method);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
-/**
- *	@fn		main
- *
- *	@brief                      Tiny main 루틴, TINY는 반복실행 서버로 명령줄에서 넘겨받은
- *                              포트로의 연결 요청을 듣는다. open_listenfd 함수를 호출해서
- *                              듣기 소켓을 오픈한 후에, TINY는 전형적인 무한 서버 루프를
- *                              실행하고, 반복적으로 연결 요청을 접수하고, 트랙잭션을
- *                              수행하고, 자신 쪽의 연결 끝을 닫는다.
- *
- *  @param  int argc
- *  @param  char **argv
- *
- *	@return	int
- */
-// fd : 파일 또는 소켓을 지칭하기 위해 부여한 숫자
-// socket
 
 // 입력 ./tiny 8000 / argc = 2, argv[0] = tiny, argv[1] = 8000
 int main(int argc, char **argv) {
@@ -69,20 +53,6 @@ int main(int argc, char **argv) {
   }
 }
 
-/**
- *	@fn		doit
- *
- *	@brief                      Tiny main 루틴, TINY는 반복실행 서버로 명령줄에서 넘겨받은
- *                              포트로의 연결 요청을 듣는다. open_listenfd 함수를 호출해서
- *                              듣기 소켓을 오픈한 후에, TINY는 전형적인 무한 서버 루프를
- *                              실행하고, 반복적으로 연결 요청을 접수하고, 트랙잭션을
- *                              수행하고, 자신 쪽의 연결 끝을 닫는다.
- *
- *  @param  int argc
- *  @param  char **argv
- *
- *	@return	void
- */
 void doit(int fd) {
   int is_static;
   struct stat sbuf;
